@@ -1,0 +1,94 @@
+name: evlog
+description: Score the observability of your entry points with evlog map and put the findings on the pull request.
+author: evloghq
+branding:
+  icon: activity
+  color: purple
+
+inputs:
+  command:
+    description: CLI command to run. Only `map` for now.
+    default: map
+  version:
+    description: '`@evlog/cli` version to run, or a full package spec (a pkg.pr.new URL). Pin it: a release can move a verdict on code nobody touched.'
+    default: latest
+  working-directory:
+    description: Directory of the project to scan, relative to the workspace.
+    default: .
+  packages:
+    description: One directory or glob per line (`apps/*`, `packages/api`) to scan each package of a monorepo separately. Leave empty to scan `working-directory` alone.
+    default: ''
+  baseline:
+    description: '`auto` scans the pull request base and compares against it. A path or `git:<ref>` is passed to the CLI as is. `none` disables the comparison.'
+    default: auto
+  min-score:
+    description: Fail when a package scores below this number (0-100).
+    default: ''
+  limit:
+    description: Most annotations per package. GitHub keeps ten per level per step and drops the rest.
+    default: '10'
+  gate:
+    description: Fail the step when a package regresses or scores below `min-score`. `false` reports and sets outputs without failing.
+    default: 'true'
+  annotations:
+    description: Draw each finding on the pull request diff.
+    default: 'true'
+  summary:
+    description: Write the report to the job summary.
+    default: 'true'
+  comment:
+    description: Post one comment on the pull request and keep it updated. Needs `pull-requests write`; skipped when the token cannot write.
+    default: 'true'
+  comment-key:
+    description: Distinguishes comments when the action runs more than once on a pull request.
+    default: default
+  token:
+    description: Token for the pull request comment. Defaults to the workflow token.
+    default: ${{ github.token }}
+
+outputs:
+  score:
+    description: Lowest package score.
+    value: ${{ steps.run.outputs.score }}
+  delta:
+    description: Lowest score movement against the baseline, empty without one.
+    value: ${{ steps.run.outputs.delta }}
+  regressions:
+    description: Number of checks that passed in the baseline and no longer do.
+    value: ${{ steps.run.outputs.regressions }}
+  instrumented:
+    description: Entry points with a wide event, every package together.
+    value: ${{ steps.run.outputs.instrumented }}
+  partial:
+    description: Entry points with a wide event and gaps.
+    value: ${{ steps.run.outputs.partial }}
+  dark:
+    description: Entry points with no wide event.
+    value: ${{ steps.run.outputs.dark }}
+  passed:
+    description: '`true` when every package met the gate, whatever `gate` is set to.'
+    value: ${{ steps.run.outputs.passed }}
+  results:
+    description: JSON array with one entry per package (directory, framework, score, delta, summary, regressions, fixed).
+    value: ${{ steps.run.outputs.results }}
+
+runs:
+  using: composite
+  steps:
+    - id: run
+      shell: bash
+      run: node "$GITHUB_ACTION_PATH/src/main.mjs"
+      env:
+        INPUT_COMMAND: ${{ inputs.command }}
+        INPUT_VERSION: ${{ inputs.version }}
+        INPUT_WORKING_DIRECTORY: ${{ inputs.working-directory }}
+        INPUT_PACKAGES: ${{ inputs.packages }}
+        INPUT_BASELINE: ${{ inputs.baseline }}
+        INPUT_MIN_SCORE: ${{ inputs.min-score }}
+        INPUT_LIMIT: ${{ inputs.limit }}
+        INPUT_GATE: ${{ inputs.gate }}
+        INPUT_ANNOTATIONS: ${{ inputs.annotations }}
+        INPUT_SUMMARY: ${{ inputs.summary }}
+        INPUT_COMMENT: ${{ inputs.comment }}
+        INPUT_COMMENT_KEY: ${{ inputs.comment-key }}
+        INPUT_TOKEN: ${{ inputs.token }}

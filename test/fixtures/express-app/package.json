@@ -1,0 +1,9 @@
+{
+  "name": "express-app",
+  "private": true,
+  "type": "module",
+  "dependencies": {
+    "evlog": "^2.30.0",
+    "express": "^5.0.0"
+  }
+}

@@ -1,0 +1,9 @@
+{
+  "name": "hono-app",
+  "private": true,
+  "type": "module",
+  "dependencies": {
+    "evlog": "^2.30.0",
+    "hono": "^4.0.0"
+  }
+}

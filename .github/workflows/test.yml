@@ -1,0 +1,150 @@
+name: test
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+  pull-requests: write
+
+env:
+  # `--format github` ships in @evlog/cli 0.8; until it is on npm the preview
+  # build of evloghq/evlog#767 stands in. Switch to `latest` with the release.
+  EVLOG_CLI: https://pkg.pr.new/@evlog/cli@767
+
+jobs:
+  unit:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
+      - run: npm run check
+      - run: npm test
+
+  single-package:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
+      - id: map
+        uses: ./
+        with:
+          version: ${{ env.EVLOG_CLI }}
+          working-directory: test/fixtures/nuxt-app
+          min-score: 40
+          comment-key: single
+      - name: Outputs are the fixture's numbers
+        env:
+          OUTPUTS: ${{ toJSON(steps.map.outputs) }}
+        run: |
+          echo "$OUTPUTS" | jq .
+          test "$(echo "$OUTPUTS" | jq -r .passed)" = "true"
+          test "$(echo "$OUTPUTS" | jq -r .instrumented)" = "2"
+          test "$(echo "$OUTPUTS" | jq -r .dark)" = "2"
+          test "$(echo "$OUTPUTS" | jq -r '.results | fromjson | length')" = "1"
+          test "$(echo "$OUTPUTS" | jq -r '.results | fromjson | .[0].framework')" = "nuxt"
+
+  monorepo:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
+      - id: map
+        uses: ./
+        with:
+          version: ${{ env.EVLOG_CLI }}
+          packages: |
+            test/fixtures/*
+          limit: 3
+          comment-key: monorepo
+      - name: Every fixture package is scanned, the non-package is not
+        env:
+          OUTPUTS: ${{ toJSON(steps.map.outputs) }}
+        run: |
+          echo "$OUTPUTS" | jq .
+          test "$(echo "$OUTPUTS" | jq -r '.results | fromjson | map(.name) | join(",")')" = "test/fixtures/express-app,test/fixtures/hono-app,test/fixtures/nuxt-app"
+          test "$(echo "$OUTPUTS" | jq -r '.results | fromjson | map(.framework) | join(",")')" = "express,hono,nuxt"
+          test "$(echo "$OUTPUTS" | jq -r .passed)" = "true"
+
+  report-only:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
+      - id: map
+        uses: ./
+        with:
+          version: ${{ env.EVLOG_CLI }}
+          working-directory: test/fixtures/express-app
+          min-score: 100
+          gate: false
+          comment: false
+          baseline: none
+      - name: The step stays green and says the gate would have failed
+        env:
+          OUTPUTS: ${{ toJSON(steps.map.outputs) }}
+        run: |
+          echo "$OUTPUTS" | jq .
+          test "$(echo "$OUTPUTS" | jq -r .passed)" = "false"
+          test "$(echo "$OUTPUTS" | jq -r .delta)" = ""
+          test "$(echo "$OUTPUTS" | jq -r '.results | fromjson | .[0].reasons[0]')" = "below --min-score 100"
+
+  gate-fails:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
+      - id: map
+        continue-on-error: true
+        uses: ./
+        with:
+          version: ${{ env.EVLOG_CLI }}
+          working-directory: test/fixtures/hono-app
+          min-score: 100
+          comment: false
+          baseline: none
+      - name: The step failed, and the outputs were still written
+        env:
+          OUTCOME: ${{ steps.map.outcome }}
+          OUTPUTS: ${{ toJSON(steps.map.outputs) }}
+        run: |
+          test "$OUTCOME" = "failure"
+          test "$(echo "$OUTPUTS" | jq -r .passed)" = "false"
+          test -n "$(echo "$OUTPUTS" | jq -r .score)"
+
+  bad-input:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
+      - id: map
+        continue-on-error: true
+        uses: ./
+        with:
+          version: ${{ env.EVLOG_CLI }}
+          working-directory: test/fixtures/nuxt-app
+          min-score: 150
+      - name: A bad input fails before anything is scanned
+        env:
+          OUTCOME: ${{ steps.map.outcome }}
+          OUTPUTS: ${{ toJSON(steps.map.outputs) }}
+        run: |
+          test "$OUTCOME" = "failure"
+          test "$(echo "$OUTPUTS" | jq -r '.score // empty')" = ""
+
+  baseline:
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
+      - id: map
+        continue-on-error: true
+        uses: ./
+        with:
+          version: ${{ env.EVLOG_CLI }}
+          packages: |
+            test/fixtures/*
+          comment-key: baseline
+      - name: The base was scanned and compared
+        env:
+          OUTPUTS: ${{ toJSON(steps.map.outputs) }}
+        run: |
+          echo "$OUTPUTS" | jq .
+          test -n "$(echo "$OUTPUTS" | jq -r .delta)"
+          echo "$OUTPUTS" | jq -e '.results | fromjson | all(has("delta"))'
