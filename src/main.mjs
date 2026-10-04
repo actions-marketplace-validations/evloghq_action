@@ -1,6 +1,6 @@
 import { appendFileSync } from 'node:fs'
 import { relative, resolve } from 'node:path'
-import { baselineFor, checkoutBase } from './lib/baseline.mjs'
+import { baselineFor, checkoutBase, relabelBaseline } from './lib/baseline.mjs'
 import { gateArgs, packageSpec, runMap } from './lib/cli.mjs'
 import { upsertComment } from './lib/comment.mjs'
 import { readEvent } from './lib/event.mjs'
@@ -59,7 +59,8 @@ async function main() {
 
       if (inputs.annotations) {
         const annotated = runMap({ spec, cwd: pkg.dir, args: ['--format', 'github', '--limit', String(inputs.limit), ...args] })
-        process.stdout.write(annotated.stdout.endsWith('\n') ? annotated.stdout : `${annotated.stdout}\n`)
+        const text = base ? relabelBaseline(annotated.stdout, baselineArg, baseline.ref) : annotated.stdout
+        process.stdout.write(text.endsWith('\n') ? text : `${text}\n`)
       }
 
       cliVersion ??= json.map.cliVersion

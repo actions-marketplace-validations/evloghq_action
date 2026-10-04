@@ -29,6 +29,14 @@ export function checkoutBase({ workspace, ref, log }) {
 }
 
 /**
+ * The CLI names a baseline the way it was spelled on the command line. Ours is
+ * a temp file nobody typed, so the ref it stands for goes in its place.
+ */
+export function relabelBaseline(text, file, ref) {
+  return file ? text.split(file).join(ref) : text
+}
+
+/**
  * Scan one package at the base and write its map to a file the CLI can take
  * as `--baseline`. A package that does not exist at the base is new and has
  * nothing to regress from.
