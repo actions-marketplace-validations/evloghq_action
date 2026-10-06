@@ -7,6 +7,7 @@ on:
 
 permissions:
   contents: read
+  checks: write
   pull-requests: write
 
 jobs:
@@ -27,6 +28,7 @@ jobs:
           working-directory: test/fixtures/nuxt-app
           min-score: 40
           baseline: none
+          annotations: false
           comment: on-failure
       - name: Outputs are the fixture's numbers
         env:
@@ -50,6 +52,7 @@ jobs:
             test/fixtures/*
           limit: 3
           baseline: none
+          annotations: false
           comment: false
       - name: Every fixture package is scanned, the non-package is not
         env:
@@ -70,6 +73,7 @@ jobs:
           working-directory: test/fixtures/nuxt-app
           min-score: 100
           gate: false
+          annotations: false
           comment: false
           baseline: none
       - name: The step stays green and says the gate would have failed
@@ -91,6 +95,7 @@ jobs:
         with:
           working-directory: test/fixtures/nuxt-app
           min-score: 100
+          annotations: false
           comment: false
           baseline: none
       - name: The step failed, and the outputs were still written
@@ -138,3 +143,32 @@ jobs:
           echo "$OUTPUTS" | jq .
           test -n "$(echo "$OUTPUTS" | jq -r .delta)"
           echo "$OUTPUTS" | jq -e '.results | fromjson | all(has("delta"))'
+
+
+  telemetry:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
+      - run: node test/telemetry-integration.mjs
+
+  telemetry-disabled:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
+      - id: map
+        uses: ./
+        env:
+          EVLOG_TELEMETRY: '1'
+        with:
+          telemetry: false
+          working-directory: test/fixtures/nuxt-app
+          baseline: none
+          annotations: false
+          comment: false
+      - name: Opt-out leaves scanning and outputs intact
+        env:
+          PASSED: ${{ steps.map.outputs.passed }}
+          INSTRUMENTED: ${{ steps.map.outputs.instrumented }}
+        run: |
+          test "$PASSED" = "true"
+          test "$INSTRUMENTED" = "2"
